@@ -22,8 +22,8 @@ import groovy.transform.CompileStatic
 class VariantMetadata {
     String name
     Map<String, String> attributes
-    List<DependencySpec> dependencies
-    List<DependencyConstraintSpec> dependencyConstraints
+    List<DependencySpec> dependencies = []
+    List<DependencyConstraintSpec> dependencyConstraints = []
     List<FileSpec> artifacts = []
 
     VariantMetadata(String name, Map<String, String> attributes = [:]) {
@@ -44,5 +44,9 @@ class VariantMetadata {
             attributes = [:]
         }
         attributes[name] = value
+    }
+
+    void dependsOn(String group, String module, String version) {
+        dependencies += new DependencySpec(group, module, version, null, null)
     }
 }

@@ -21,8 +21,18 @@ import groovy.transform.CompileStatic
 @CompileStatic
 class VariantSpec {
     String name
+    List<Object> dependsOn = []
+    List<Object> constraints = []
     Map<String, String> attributes = [:]
     List<ArtifactSpec> artifacts = []
+
+    void dependsOn(coord) {
+        dependsOn << coord
+    }
+
+    void constraint(coord) {
+        constraints << coord
+    }
 
     void attribute(String name, String value) {
         attributes[name] = value

@@ -90,7 +90,8 @@ class IvyFileModule extends AbstractModule implements IvyModule {
         this.revision = revision
         this.m2Compatible = m2Compatible
         configurations['runtime'] = [extendsFrom: [], transitive: true, visibility: 'public']
-        configurations['default'] = [extendsFrom: ['runtime'], transitive: true, visibility: 'public']
+        configurations['compile'] = [extendsFrom: [], transitive: true, visibility: 'public']
+        configurations['default'] = [extendsFrom: ['compile,runtime'], transitive: true, visibility: 'public']
     }
 
     @Override
@@ -395,10 +396,10 @@ class IvyFileModule extends AbstractModule implements IvyModule {
                 new VariantMetadata(
                     v.name,
                     v.attributes,
-                    dependencies.collect { d ->
+                    v.dependencies + dependencies.collect { d ->
                         new DependencySpec(d.organisation, d.module, d.revision, d.rejects, d.exclusions)
                     },
-                    dependencyConstraints.collect { d ->
+                    v.dependencyConstraints + dependencyConstraints.collect { d ->
                         new DependencyConstraintSpec(d.organisation, d.module, d.revision, d.rejects)
                     },
                     v.artifacts ?: defaultArtifacts
@@ -478,6 +479,20 @@ class IvyFileModule extends AbstractModule implements IvyModule {
                             builder.exclude(excludeAttrs)
                         }
                     }
+                }
+            }
+            def compileDependencies = variants.find{ it.name == 'api' }?.dependencies
+            def runtimeDependencies = variants.find{ it.name == 'runtime' }?.dependencies
+            if (compileDependencies) {
+                compileDependencies.each { dep ->
+                    def depAttrs = [org: dep.group, name: dep.module, rev: dep.prefers, conf: 'compile->default']
+                    builder.dependency(depAttrs)
+                }
+            }
+            if (runtimeDependencies) {
+                (runtimeDependencies - compileDependencies).each { dep ->
+                    def depAttrs = [org: dep.group, name: dep.module, rev: dep.prefers, conf: 'runtime->default']
+                    builder.dependency(depAttrs)
                 }
             }
         }

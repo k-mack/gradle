@@ -191,6 +191,10 @@ abstract class AbstractMavenModule extends AbstractModule implements MavenModule
         return artifacts
     }
 
+    List<VariantMetadata> getVariants() {
+        return variants
+    }
+
     void assertNotPublished() {
         pomFile.assertDoesNotExist()
         moduleMetadata.file.assertDoesNotExist()
@@ -427,10 +431,10 @@ abstract class AbstractMavenModule extends AbstractModule implements MavenModule
                 new VariantMetadata(
                     v.name,
                     v.attributes,
-                    dependencies.findAll { !it.optional }.collect { d ->
+                    v.dependencies + dependencies.findAll { !it.optional }.collect { d ->
                         new DependencySpec(d.groupId, d.artifactId, d.version, d.rejects, d.exclusions)
                     },
-                    dependencies.findAll { it.optional }.collect { d ->
+                    v.dependencyConstraints + dependencies.findAll { it.optional }.collect { d ->
                         new DependencyConstraintSpec(d.groupId, d.artifactId, d.version, d.rejects)
                     },
                     v.artifacts?:defaultArtifacts
@@ -472,7 +476,7 @@ abstract class AbstractMavenModule extends AbstractModule implements MavenModule
                         version(parentPom.version)
                     }
                 }
-                if (dependencies) {
+                if (dependencies || !variants.dependencies.flatten().empty) {
                     dependencies {
                         dependencies.each { dep ->
                             dependency {
@@ -502,6 +506,28 @@ abstract class AbstractMavenModule extends AbstractModule implements MavenModule
                                             }
                                         }
                                     }
+                                }
+                            }
+                        }
+                        def compileDependencies = variants.find{ it.name == 'api' }?.dependencies
+                        def runtimeDependencies = variants.find{ it.name == 'runtime' }?.dependencies
+                        if (compileDependencies) {
+                            compileDependencies.each { dep ->
+                                dependency {
+                                    groupId(dep.group)
+                                    artifactId(dep.module)
+                                    if (dep.prefers) { version(dep.prefers) }
+                                    scope('compile')
+                                }
+                            }
+                        }
+                        if (runtimeDependencies) {
+                            (runtimeDependencies - compileDependencies).each { dep ->
+                                dependency {
+                                    groupId(dep.group)
+                                    artifactId(dep.module)
+                                    if (dep.prefers) { version(dep.prefers) }
+                                    scope('runtime')
                                 }
                             }
                         }

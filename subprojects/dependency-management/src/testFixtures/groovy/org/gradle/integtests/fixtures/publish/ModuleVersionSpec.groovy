@@ -70,6 +70,10 @@ class ModuleVersionSpec {
         expectGetMetadata << InteractionExpectation.GET_MISSING
     }
 
+    void expectGetMetadataMissingThatIsFoundElsewhere() {
+        expectGetMetadata << InteractionExpectation.GET_MISSING_FOUND_ELSEWHERE
+    }
+
     void expectHeadMetadata() {
         expectGetMetadata << InteractionExpectation.HEAD
     }
@@ -134,6 +138,7 @@ class ModuleVersionSpec {
         withModule << { ->
             if (moduleClass.isAssignableFrom(delegate.class)) {
                 spec.delegate = delegate
+                spec.resolveStrategy = Closure.DELEGATE_FIRST
                 spec()
             }
         }
@@ -147,7 +152,14 @@ class ModuleVersionSpec {
 
     void build(HttpRepository repository) {
         def module = repository.module(groupId, artifactId, version)
-        def gradleMetadataEnabled = GradleMetadataResolveRunner.isGradleMetadataEnabled()
+        def gradleMetadataEnabled
+        if (repository.providesMetadata == HttpRepository.MetadataType.ONLY_ORIGINAL) {
+            gradleMetadataEnabled = false
+        } else if (repository.providesMetadata == HttpRepository.MetadataType.ONLY_GRADLE) {
+            gradleMetadataEnabled = true
+        } else {
+            gradleMetadataEnabled = GradleMetadataResolveRunner.isGradleMetadataEnabled()
+        }
         def newResolveBehaviorEnabled = GradleMetadataResolveRunner.isExperimentalResolveBehaviorEnabled()
         if (gradleMetadataEnabled) {
             module.withModuleMetadata()
@@ -190,11 +202,20 @@ class ModuleVersionSpec {
                         module.ivy.expectGetMissing()
                     }
                     break
+                case InteractionExpectation.GET_MISSING_FOUND_ELSEWHERE:
+                    if (newResolveBehaviorEnabled || gradleMetadataEnabled) {
+                        module.moduleMetadata.expectGetMissing()
+                    } else if (module instanceof MavenModule) {
+                        module.pom.expectGetMissing()
+                    } else if (module instanceof IvyModule) {
+                        module.ivy.expectGetMissing()
+                    }
+                    break
                 default:
                     if (newResolveBehaviorEnabled && !gradleMetadataEnabled) {
                         module.moduleMetadata.allowGetOrHead()
                     }
-                    if (newResolveBehaviorEnabled && gradleMetadataEnabled) {
+                    if (gradleMetadataEnabled) {
                         module.moduleMetadata.expectGet()
                     } else if (module instanceof MavenModule) {
                         module.pom.expectGet()
@@ -246,11 +267,15 @@ class ModuleVersionSpec {
         if (variants) {
             variants.each { variant ->
                 module.withVariant(variant.name) {
-                    attributes = variant.attributes
+                    attributes = attributes? attributes + variant.attributes : variant.attributes
                     artifacts = variant.artifacts.collect {
                         // publish variant files as "classified". This can be arbitrary in practice, this
                         // just makes it easier for publishing specs
                         new FileSpec("${module.module}-${module.version}-$it.name.${it.ext}", it.url)
+                    }
+                    variant.dependsOn.each {
+                        def args = it.split(':') as List
+                        dependsOn(*args)
                     }
                 }
             }
